@@ -9,9 +9,11 @@
 @implementation RNSound {
   NSMutableDictionary* _playerPool;
   NSMutableDictionary* _callbackPool;
+  int _poolSize;
 }
 
 @synthesize _key = _key;
+@synthesize _poolSize = _poolSize;
 
 - (void)audioSessionChangeObserver:(NSNotification *)notification{
     NSDictionary* userInfo = notification.userInfo;
@@ -55,7 +57,15 @@
 }
 
 -(AVAudioPlayer*) playerForKey:(nonnull NSNumber*)key {
-  return [[self playerPool] objectForKey:key];
+  NSString *baseKey = [NSString stringWithFormat:@"%@-%d", key, 0];
+  for (int poolIndex = 0; poolIndex < self._poolSize; poolIndex++) {
+    NSString *sKey = [NSString stringWithFormat:@"%@-%d", key, poolIndex];
+    AVAudioPlayer* player = [[self playerPool] objectForKey:sKey];
+    if (![player isPlaying]) {
+      return player;
+    }
+  }
+  return [[self playerPool] objectForKey:baseKey];
 }
 
 -(NSNumber*) keyForPlayer:(nonnull AVAudioPlayer*)player {
@@ -181,31 +191,41 @@ RCT_EXPORT_METHOD(prepare:(NSString*)fileName
   NSURL* fileNameUrl;
   AVAudioPlayer* player;
 
-  if ([fileName hasPrefix:@"http"]) {
-    fileNameUrl = [NSURL URLWithString:[fileName stringByRemovingPercentEncoding]];
-    NSData* data = [NSData dataWithContentsOfURL:fileNameUrl];
-    player = [[AVAudioPlayer alloc] initWithData:data error:&error];
-  }
-  else if ([fileName hasPrefix:@"ipod-library://"]) {
-    fileNameUrl = [NSURL URLWithString:fileName];
-    player = [[AVAudioPlayer alloc] initWithContentsOfURL:fileNameUrl error:&error];
-  }
-  else {
-    fileNameUrl = [NSURL fileURLWithPath:[fileName stringByRemovingPercentEncoding]];
-    player = [[AVAudioPlayer alloc]
-              initWithContentsOfURL:fileNameUrl
-              error:&error];
+  if ([options valueForKey:@"poolSize"]) {
+    NSNumber* poolSizeNum = [options valueForKey:@"poolSize"];
+    self._poolSize = [poolSizeNum intValue];
+  } else {
+    self._poolSize = 1;
   }
 
-  if (player) {
-    player.delegate = self;
-    player.enableRate = YES;
-    [player prepareToPlay];
-    [[self playerPool] setObject:player forKey:key];
-    callback(@[[NSNull null], @{@"duration": @(player.duration),
-                                @"numberOfChannels": @(player.numberOfChannels)}]);
-  } else {
-    callback(@[RCTJSErrorFromNSError(error)]);
+  for (int poolIndex = 0; poolIndex < self._poolSize; poolIndex++) {
+    if ([fileName hasPrefix:@"http"]) {
+      fileNameUrl = [NSURL URLWithString:[fileName stringByRemovingPercentEncoding]];
+      NSData* data = [NSData dataWithContentsOfURL:fileNameUrl];
+      player = [[AVAudioPlayer alloc] initWithData:data error:&error];
+    }
+    else if ([fileName hasPrefix:@"ipod-library://"]) {
+      fileNameUrl = [NSURL URLWithString:fileName];
+      player = [[AVAudioPlayer alloc] initWithContentsOfURL:fileNameUrl error:&error];
+    }
+    else {
+      fileNameUrl = [NSURL fileURLWithPath:[fileName stringByRemovingPercentEncoding]];
+      player = [[AVAudioPlayer alloc]
+                initWithContentsOfURL:fileNameUrl
+                error:&error];
+    }
+
+    if (player) {
+      player.delegate = self;
+      player.enableRate = YES;
+      [player prepareToPlay];
+      NSString *sKey = [NSString stringWithFormat:@"%@-%d", key, poolIndex];
+      [[self playerPool] setObject:player forKey:sKey];
+      callback(@[[NSNull null], @{@"duration": @(player.duration),
+                                  @"numberOfChannels": @(player.numberOfChannels)}]);
+    } else {
+      callback(@[RCTJSErrorFromNSError(error)]);
+    }
   }
 }
 
@@ -242,7 +262,10 @@ RCT_EXPORT_METHOD(release:(nonnull NSNumber*)key) {
   if (player) {
     [player stop];
     [[self callbackPool] removeObjectForKey:player];
-    [[self playerPool] removeObjectForKey:key];
+    for (int poolIndex = 0; poolIndex < self._poolSize; poolIndex++) {
+      NSString *sKey = [NSString stringWithFormat:@"%@-%d", key, poolIndex];
+      [[self playerPool] removeObjectForKey:sKey];
+    }
     NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
     [notificationCenter removeObserver:self];
   }

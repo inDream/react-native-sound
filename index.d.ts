@@ -46,8 +46,9 @@ declare class Sound {
    * @param filename Either absolute or relative path to the sound file
    * @param basePath Optional base path of the file. Omit this or pass '' if filename is an absolute path. Otherwise, you may use one of the predefined directories: Sound.MAIN_BUNDLE, Sound.DOCUMENT, Sound.LIBRARY, Sound.CACHES.
    * @param onError Optional callback function if loading file failed
+   * @param options Optional options e.g. 'poolSize' for control player pool
    */
-  constructor(filename: string, basePath: string, onError: (error: any) => void)
+  constructor(filename: string, basePath: string, onError: (error: any) => void, options: object)
 
   /**
    * Return true if the sound has been loaded.
@@ -92,7 +93,7 @@ declare class Sound {
    * Return the time of audio (second)
    */
   getDuration(): number
-  
+
   /**
    * Return the volume of the audio player (not the system-wide volume),
    * Ranges from 0.0 (silence) through 1.0 (full volume, the default)

@@ -8,4 +8,5 @@
 
 @interface RNSound : NSObject <RCTBridgeModule, AVAudioPlayerDelegate>
 @property (nonatomic, weak) NSNumber* _key;
+@property (nonatomic) int _poolSize;
 @end
